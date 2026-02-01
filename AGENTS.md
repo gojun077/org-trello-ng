@@ -40,7 +40,18 @@ command, working ERT tests with real/mocked API calls gated by user token.
 
 ## Task Tracking
 
-Use Beads `bd` CLI tool for task tracking
+This repo uses Beads `bd` CLI tool for task tracking
+
+Run `bd prime` for workflow context, or install hooks (`bd hooks install`) for auto-injection.
+
+File a bead for any task taking longer than 2 min
+
+**Quick reference:**
+- `bd ready` - Find unblocked work
+- `bd create "Title" --type task --priority 2` - Create issue
+- `bd close <id>` - Complete work
+- `bd sync` - Sync with git (run at session end)
+
 
 ## Agent Housekeeping Tips
 
