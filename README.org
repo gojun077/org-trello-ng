@@ -11,12 +11,5 @@
 - Created on: [2026-02-01 Sun]
 - Last Updated: [2026-02-01 Sun 21:07]
 
-~org-trello-ng~ is inspired by the original [[https://github.com/org-trello/org-trello][org-trello]] Emacs minor mode
-for ~org-mode~. Unfortunately, the original project is no longer
-maintained and the automated tests no longer run on Emacs 30.x and above.
-~org-trello-ng~ aims to add missing functionality such as integration
-with ~org-refile~ that will move Trello cards (i.e. ~refile~ org tasks)
-to other Trello boards (org buffers). Also ~org-trello-ng~ will improve
-the performance of syncing cards from Trello boards which the original
-project was unable to handle when the number of cards was much greater than
+~org-trello-ng~ is inspired by the original [[https://github.com/org-trello/org-trello][org-trello]] Emacs minor mode for ~org-mode~. Unfortunately, the original project is no longer maintained and the automated tests no longer run on Emacs 30.x and above.  ~org-trello-ng~ aims to add missing functionality such as integration with ~org-refile~ that will move Trello cards (i.e. ~refile~ org tasks) to other Trello boards (org buffers). Also ~org-trello-ng~ will improve the performance of syncing cards from Trello boards which the original project was unable to handle when the number of cards was much greater than
 100.
