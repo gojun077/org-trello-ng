@@ -158,6 +158,29 @@ bd automatically syncs via Dolt:
 - Use `bd dolt push`/`bd dolt pull` for remote sync
 - No manual export/import needed!
 
+### Dolt Remote & Sync Commands
+
+The task database syncs to DoltHub independently of git. Core commands:
+
+```bash
+bd dolt status                      # Check if Dolt server is running
+bd dolt push                        # Push task data to DoltHub remote
+bd dolt pull                        # Pull latest task data from remote
+bd dolt commit                      # Commit pending changes locally
+bd dolt remote list                 # List configured remotes
+bd dolt remote add <name> <url>     # Add a remote
+bd dolt remote remove <name>        # Remove a remote
+```
+
+**Worktrees & multi-agent**: Each git worktree has its own `.beads/dolt/` directory. All worktrees sync through the shared DoltHub remote. Always `bd dolt pull` at the start of a session to get the latest task state.
+
+**Useful flags**:
+- `--readonly` — Prevent writes (for worker sandboxes)
+- `--sandbox` — Disable auto-sync for isolated work
+- `--dolt-auto-commit batch` — Defer commits; flush on `bd dolt commit` or SIGTERM
+
+**For the full list of subcommands, flags, and configuration options, run `bd dolt --help`.** The CLI help is the most up-to-date reference.
+
 ### Important Rules
 
 - ✅ Use bd for ALL task tracking
