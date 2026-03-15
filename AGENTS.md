@@ -23,6 +23,7 @@ AGENTS.md: Guidelines for Agentic Coding in org-trello-ng
 - Terse comments; function and var names should convey intent.
 - For API: Wrap Trello REST calls in `src/api.el` using `request` or similar; handle errors.
 - Security: Use auth-source for tokens from `~/.authinfo.gpg` (machine "api.trello.com"); never log secrets.
+- For sync: Optimize with batching; be mindful of [Trello rate limits](https://developer.atlassian.com/cloud/trello/guides/rest-api/rate-limits/) (300 req/10s per key, 100 req/10s per token, 429 on limit).
 
 ## Testing
 
@@ -33,190 +34,56 @@ AGENTS.md: Guidelines for Agentic Coding in org-trello-ng
 - `make test` uses ERT i.e. `emacs -batch -l ert -l test/file.el -f ert-run-tests-batch-and-exit`
 - Gate real API tests with user token; provide mocks for offline/safety.
 
-## Task Tracking
-
-This repo uses Beads `bd` CLI tool for task tracking.
-
-Run `bd prime` for workflow context, or install hooks (`bd hooks install`) for auto-injection.
-
-File a bead for any task taking longer than 2 min
-
-**Quick reference:**
-- `bd ready` - Find unblocked work
-- `bd create "Title" --type task --priority 2` - Create issue
-- `bd close <id>` - Complete work
-- `bd sync` - Sync with git (run at session end)
-
-
-## Agent Housekeeping Tips
-
-- Before editing: Analyze filenames/structure; refuse malicious code.
-- Use tools: Glob/Grep for search, Read/Edit/Write for files, `bash` for commands (e.g., `git`, tests).
-- Be proactive but confirm actions; batch tool calls.
-- For sync: Optimize recursive sync with batching; handle large Trello boards and be mindful of [rate limits](https://developer.atlassian.com/cloud/trello/guides/rest-api/rate-limits/)
-  + 300 requests per 10 seconds for each API key
-  + 100 requests per 10 second interval for each token
-  + a limit on requests to `/1/members/` of 100 requests per 900 seconds
-  + request limit errors return `429`
-- Reference code as `file_path:line_number`.
-
-## Landing the Plane (Session Completion)
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-
 <!-- BEGIN BEADS INTEGRATION -->
 ## Issue Tracking with bd (beads)
 
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
+This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs or external trackers.
 
-### Why bd?
-
-- Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Dolt-powered version control with native sync
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
-
-### Quick Start
-
-**Check for ready work:**
+### Quick Reference
 
 ```bash
-bd ready --json
+bd ready --json                        # Find unblocked work
+bd update <id> --claim --json          # Claim a task
+bd create "Title" -t task -p 2 --json  # Create issue (types: bug/feature/task/epic/chore)
+bd close <id> --reason "Done" --json   # Complete work
 ```
 
-**Create new issues:**
+Priorities: 0=critical, 1=high, 2=medium (default), 3=low, 4=backlog
+
+Link discovered work: `bd create "Found bug" -p 1 --deps discovered-from:<parent-id>`
+
+### Dolt Remote & Sync
+
+The task database syncs to DoltHub independently of git.
 
 ```bash
-bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
+bd dolt status                         # Check Dolt server status
+bd dolt push                           # Push task data to DoltHub
+bd dolt pull                           # Pull latest task data (do this at session start)
+bd dolt commit                         # Commit pending changes locally
+bd dolt remote list                    # List configured remotes
 ```
 
-**Claim and update:**
+**Troubleshooting**: If `bd dolt push` fails with "no common ancestor" or "PermissionDenied":
+1. Verify the CLI-level remote exists: `dolt remote -v` (run from `.beads/dolt/`)
+2. If missing, add it: `dolt remote add origin <url>` (get URL from `bd dolt remote list`)
+3. Force-push through SQL to reconcile: `mysql -h 127.0.0.1 -P <port> -u root -e "CALL dolt_push('--force', 'origin', 'main');" <db>`
+4. After that, `bd dolt push` should work normally.
 
-```bash
-bd update <id> --claim --json
-bd update bd-42 --priority 1 --json
-```
+**Useful flags**: `--readonly` (block writes), `--sandbox` (disable auto-sync), `--dolt-auto-commit batch` (defer commits). Run `bd dolt --help` for full reference.
+<!-- END BEADS INTEGRATION -->
 
-**Complete work:**
+## Session Completion
 
-```bash
-bd close bd-42 --reason "Completed" --json
-```
+**Work is NOT complete until `git push` succeeds.** Never stop before pushing.
 
-### Issue Types
-
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
-
-### Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-### Workflow for AI Agents
-
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task atomically**: `bd update <id> --claim`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
-
-### Auto-Sync
-
-bd automatically syncs via Dolt:
-
-- Each write auto-commits to Dolt history
-- Use `bd dolt push`/`bd dolt pull` for remote sync
-- No manual export/import needed!
-
-### Dolt Remote & Sync Commands
-
-The task database syncs to DoltHub independently of git. Core commands:
-
-```bash
-bd dolt status                      # Check if Dolt server is running
-bd dolt push                        # Push task data to DoltHub remote
-bd dolt pull                        # Pull latest task data from remote
-bd dolt commit                      # Commit pending changes locally
-bd dolt remote list                 # List configured remotes
-bd dolt remote add <name> <url>     # Add a remote
-bd dolt remote remove <name>        # Remove a remote
-```
-
-**Worktrees & multi-agent**: Each git worktree has its own `.beads/dolt/` directory. All worktrees sync through the shared DoltHub remote. Always `bd dolt pull` at the start of a session to get the latest task state.
-
-**Useful flags**:
-- `--readonly` — Prevent writes (for worker sandboxes)
-- `--sandbox` — Disable auto-sync for isolated work
-- `--dolt-auto-commit batch` — Defer commits; flush on `bd dolt commit` or SIGTERM
-
-**For the full list of subcommands, flags, and configuration options, run `bd dolt --help`.** The CLI help is the most up-to-date reference.
-
-### Important Rules
-
-- ✅ Use bd for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
-- ❌ Do NOT create markdown TODO lists
-- ❌ Do NOT use external issue trackers
-- ❌ Do NOT duplicate tracking systems
-
-For more details, see README.md and docs/QUICKSTART.md.
-
-## Landing the Plane (Session Completion)
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+1. File issues (`bd create`) for remaining work
+2. Run quality gates if code changed: `make all`
+3. Update issue status: `bd close <id>`
+4. Push everything:
    ```bash
    git pull --rebase
    bd dolt push
    git push
-   git status  # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-
-<!-- END BEADS INTEGRATION -->
+5. Hand off context for the next session
