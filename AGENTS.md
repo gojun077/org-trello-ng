@@ -26,10 +26,12 @@ AGENTS.md: Guidelines for Agentic Coding in org-trello-ng
 
 ## Testing
 
-- Use ERT in `test/`; tests verify CRUD, card moves, sync.
+- `Makefile` defines recipes `build`, `test`, `lint` useful for testing
+- After changes, run `make lint` to check `elisp` syntax
+- After every change, run `make all` to test for regressions
+- All new functionality require tests under `test/` directory
+- `make test` uses ERT i.e. `emacs -batch -l ert -l test/file.el -f ert-run-tests-batch-and-exit`
 - Gate real API tests with user token; provide mocks for offline/safety.
-- Run tests via `emacs -batch -l ert -l test/file.el -f ert-run-tests-batch-and-exit`.
-- After changes, run `lint/typecheck` if applicable (ask user if unknown).
 
 ## Task Tracking
 
