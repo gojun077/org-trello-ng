@@ -38,6 +38,8 @@ AGENTS.md: Guidelines for Agentic Coding in org-trello-ng
 ## Issue Tracking with bd (beads)
 
 This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs or external trackers.
+Create a new feature branch based on the beads issue name + short semantic description.
+
 
 ### Quick Reference
 
@@ -45,6 +47,10 @@ This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TOD
 bd ready --json                        # Find unblocked work
 bd update <id> --claim --json          # Claim a task
 bd create "Title" -t task -p 2 --json  # Create issue (types: bug/feature/task/epic/chore)
+
+# Use stdin for descriptions with special characters (backticks, !, nested quotes)
+echo 'Description with `backticks` and "quotes"' | bd create "Title" --description=- --json
+
 bd close <id> --reason "Done" --json   # Complete work
 ```
 
