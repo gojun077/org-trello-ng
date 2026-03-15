@@ -10,6 +10,7 @@
 
 (require 'url)
 (require 'json)
+(require 'seq)
 (require 'org-trello-ng-auth)
 
 (defconst org-trello-ng-api-base-url "https://api.trello.com/1"
@@ -58,6 +59,26 @@ BODY is an alist that will be JSON-encoded.  Returns parsed JSON response."
     (unwind-protect
         (org-trello-ng-api--handle-response buffer)
       (kill-buffer buffer))))
+
+(defconst org-trello-ng-api-batch-max 10
+  "Maximum number of URLs per Trello batch request.")
+
+(defun org-trello-ng-api-batch-get (endpoints)
+  "Batch multiple GET ENDPOINTS into a single HTTP call via /1/batch.
+ENDPOINTS is a list of API path strings (e.g., \"/boards/ID/cards\").
+Trello limits batch requests to 10 URLs per call; split larger
+lists into chunks automatically.
+Return a flat list of response objects, one per endpoint."
+  (let ((results '()))
+    (while endpoints
+      (let* ((chunk (seq-take endpoints org-trello-ng-api-batch-max))
+             (rest (seq-drop endpoints org-trello-ng-api-batch-max))
+             (urls-param (mapconcat #'identity chunk ","))
+             (response (org-trello-ng-api-get "/batch"
+                                              (list (list "urls" urls-param)))))
+        (setq results (append results response))
+        (setq endpoints rest)))
+    results))
 
 (defun org-trello-ng-api-get-my-boards ()
   "Fetch all boards for the authenticated user."
