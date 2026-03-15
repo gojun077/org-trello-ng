@@ -2,6 +2,7 @@
 *.elc
 scratch
 .beads/daemon.log
+.beads/push-state.json
 
 # Dolt database files (added by bd init)
 .dolt/
