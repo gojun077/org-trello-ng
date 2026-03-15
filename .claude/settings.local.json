@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bd:*)",
+      "Bash(cd:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(dolt creds:*)",
+      "Bash(dolt push:*)"
+    ]
+  }
+}
