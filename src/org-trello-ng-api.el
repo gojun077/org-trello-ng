@@ -47,6 +47,19 @@ Returns parsed JSON response."
         (org-trello-ng-api--handle-response buffer)
       (kill-buffer buffer))))
 
+(defun org-trello-ng-api-post (endpoint body &optional params)
+  "Make POST request to ENDPOINT with JSON BODY and optional PARAMS.
+BODY is an alist that will be JSON-encoded.  Returns parsed JSON response."
+  (let* ((url (org-trello-ng-api--build-url endpoint params))
+         (url-request-method "POST")
+         (url-request-extra-headers
+          '(("Content-Type" . "application/json")))
+         (url-request-data (encode-coding-string (json-encode body) 'utf-8))
+         (buffer (url-retrieve-synchronously url t t 30)))
+    (unwind-protect
+        (org-trello-ng-api--handle-response buffer)
+      (kill-buffer buffer))))
+
 (defconst org-trello-ng-api-batch-max 10
   "Maximum number of URLs per Trello batch request.")
 
