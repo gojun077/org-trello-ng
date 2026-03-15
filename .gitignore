@@ -1,6 +1,7 @@
 # Byte-compiled Emacs Lisp files
 *.elc
 scratch
+.beads/daemon.log
 
 # Dolt database files (added by bd init)
 .dolt/
