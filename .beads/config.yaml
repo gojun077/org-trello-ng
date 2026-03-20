@@ -65,3 +65,12 @@ sync-branch: "beads-sync"
 # - linear.api-key
 # - github.org
 # - github.repo
+
+dolt.database: "dolt"
+
+# DoltHub remote for task graph persistence
+# On fresh clone: dolt login, then from .beads/dolt/:
+#   dolt remote add origin https://doltremoteapi.dolthub.com/gojun077/org_trello_ng
+#   dolt fetch origin && dolt reset --hard remotes/origin/main
+#   bd dolt stop && bd dolt start
+dolt.remote: "https://doltremoteapi.dolthub.com/gojun077/org_trello_ng"
