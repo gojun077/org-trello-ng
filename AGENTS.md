@@ -60,7 +60,7 @@ Link discovered work: `bd create "Found bug" -p 1 --deps discovered-from:<parent
 
 ### Dolt Remote & Sync
 
-The task database syncs to DoltHub independently of git.
+The task database syncs to [DoltHub](https://www.dolthub.com/repositories/gojun077/org_trello_ng) independently of git. The remote URL is also recorded in `.beads/config.yaml` under `dolt.remote`.
 
 ```bash
 bd dolt status                         # Check Dolt server status
@@ -70,13 +70,48 @@ bd dolt commit                         # Commit pending changes locally
 bd dolt remote list                    # List configured remotes
 ```
 
-**Troubleshooting**: If `bd dolt push` fails with "no common ancestor" or "PermissionDenied":
-1. Verify the CLI-level remote exists: `dolt remote -v` (run from `.beads/dolt/`)
-2. If missing, add it: `dolt remote add origin <url>` (get URL from `bd dolt remote list`)
-3. Force-push through SQL to reconcile: `mysql -h 127.0.0.1 -P <port> -u root -e "CALL dolt_push('--force', 'origin', 'main');" <db>`
-4. After that, `bd dolt push` should work normally.
-
 **Useful flags**: `--readonly` (block writes), `--sandbox` (disable auto-sync), `--dolt-auto-commit batch` (defer commits). Run `bd dolt --help` for full reference.
+
+### Fresh Clone Bootstrap
+
+On a fresh clone the local dolt repo under `.beads/dolt/` has no remote and no data. Follow these steps:
+
+1. **Authenticate with DoltHub** (opens browser for OAuth):
+   ```bash
+   dolt login
+   ```
+2. **Add the remote and fetch data** (run from `.beads/dolt/`):
+   ```bash
+   cd .beads/dolt
+   dolt remote add origin https://doltremoteapi.dolthub.com/gojun077/org_trello_ng
+   dolt fetch origin
+   dolt reset --hard remotes/origin/main
+   ```
+   `dolt pull` will fail with "no common ancestor" on a fresh init — use fetch+reset instead.
+3. **Restart the dolt server** so `bd` picks up the new data:
+   ```bash
+   bd dolt stop && bd dolt start
+   ```
+4. **Run doctor and fix warnings**:
+   ```bash
+   bd doctor --fix --yes
+   bd config set beads.role maintainer
+   bd vc commit -m "bootstrap: initial setup"
+   ```
+5. **Verify** everything works:
+   ```bash
+   bd ready --json                    # Should list tasks from remote
+   bd dolt push                       # Should succeed
+   ```
+
+### Troubleshooting
+
+- **`bd dolt push` fails with "no common ancestor" or "PermissionDenied"**:
+  1. Verify the CLI-level remote exists: `dolt remote -v` (run from `.beads/dolt/`)
+  2. If missing, add it: `dolt remote add origin <url>` (get URL from `bd dolt remote list`)
+  3. Force-push through SQL to reconcile: `mysql -h 127.0.0.1 -P <port> -u root -e "CALL dolt_push('--force', 'origin', 'main');" <db>`
+  4. After that, `bd dolt push` should work normally.
+- **`bd` can't find the database** ("database not found on Dolt server"): The dolt server names the database after the directory (i.e. `dolt`). Ensure `dolt.database` in `.beads/config.yaml` is set to `"dolt"`. Fix with: `bd dolt set database dolt --update-config`
 <!-- END BEADS INTEGRATION -->
 
 ## Session Completion
