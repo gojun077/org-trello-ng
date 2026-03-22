@@ -12,9 +12,6 @@ last-touched
 # Daemon runtime (lock, log, pid)
 daemon.*
 
-# beads credentials
-.beads-credential-key
-
 # Interactions log (runtime, not versioned)
 interactions.jsonl
 
@@ -23,6 +20,9 @@ push-state.json
 
 # Lock files (various runtime locks)
 *.lock
+
+# Credential key (encryption key for federation peer auth — never commit)
+.beads-credential-key
 
 # Local version tracking (prevents upgrade notification spam after git ops)
 .local_version
@@ -47,13 +47,16 @@ dolt-server.pid
 dolt-server.log
 dolt-server.lock
 dolt-server.port
-dolt-config.log
+dolt-server.activity
 
 # Corrupt backup directories (created by bd doctor --fix recovery)
 *.corrupt.backup/
 
 # Backup data (auto-exported JSONL, local-only)
 backup/
+
+# Per-project environment file (Dolt connection config, GH#2520)
+.env
 
 # Legacy files (from pre-Dolt versions)
 *.db
