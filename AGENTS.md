@@ -90,17 +90,57 @@ make setup               # Otherwise, run this
   3. After that, `bd dolt push` should work normally.
 <!-- END BEADS INTEGRATION -->
 
+## Session Initialization (The Lobby)
+
+Each git worktree (e.g. `org-trello-ng-worker-0`, `-1`, `-2`) starts from a detached `HEAD` on `main`. This is expected. **Do not commit on detached HEAD.**
+
+1. **Verify the worktree is clean:**
+   ```bash
+   git status --porcelain
+   ```
+   If the worktree is dirty, stop and resolve before claiming new work.
+
+2. **Sync task state and git refs:**
+   ```bash
+   bd dolt pull
+   git fetch origin --prune
+   ```
+   If `bd ready` fails, run `make setup` first.
+
+3. **Pick and claim exactly one task:**
+   ```bash
+   bd ready --json
+   bd update <id> --claim --json
+   ```
+
+4. **Create or resume the task branch** (handles local, remote, and new branches):
+   ```bash
+   make branch TASK=<id> SLUG=<short-slug>
+   ```
+   If Git reports the branch is already checked out in another worktree, do **not** force a new branch. Inspect `git worktree list` and resume from the existing worktree instead.
+
+5. **Confirm you are on a branch before editing:**
+   ```bash
+   git branch --show-current
+   ```
+
 ## Session Completion
 
-**Work is NOT complete until `git push` succeeds.** Never stop before pushing.
+**Work is NOT complete until task data is synced, the branch is pushed, and a PR exists.** Never stop before all three succeed.
 
-1. File issues (`bd create`) for remaining work
-2. Run quality gates if code changed: `make all`
-3. Update issue status: `bd close <id>`
-4. Push everything:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   ```
-5. Hand off context for the next session
+Run the full completion sequence in one step:
+```bash
+make finish BEADS_ID=<id>
+```
+
+This runs quality gates (`make all`), rebases onto `origin/main`, pushes task data and code, creates or reuses a GitHub PR (idempotent), and closes the bead — in that order. If any step fails, it stops.
+
+Or run steps individually:
+
+1. File issues (`bd create`) for remaining or discovered follow-up work
+2. `make all` — run quality gates
+3. `git fetch origin --prune && git rebase origin/main`
+4. `bd dolt push && git push -u origin HEAD`
+5. `make pr BEADS_ID=<id>` — create or reuse the PR (idempotent)
+6. `bd close <id> --reason "Done" --json` — only after push and PR succeed
+7. Hand off context for the next session, including bead id, branch name, and PR URL
