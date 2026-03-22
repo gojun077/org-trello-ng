@@ -16,6 +16,12 @@
 (defconst org-trello-ng-api-base-url "https://api.trello.com/1"
   "Base URL for Trello API v1.")
 
+(define-error 'org-trello-ng-api-error "Trello API error")
+(define-error 'org-trello-ng-api-client-error "Trello API client error (4xx)"
+  'org-trello-ng-api-error)
+(define-error 'org-trello-ng-api-server-error "Trello API server error (5xx)"
+  'org-trello-ng-api-error)
+
 (defun org-trello-ng-api--build-url (endpoint &optional extra-params)
   "Build full API URL for ENDPOINT with auth and EXTRA-PARAMS."
   (let ((creds (org-trello-ng-auth-get-credentials)))
@@ -29,14 +35,36 @@
               "?"
               (url-build-query-string params)))))
 
-(defun org-trello-ng-api--handle-response (buffer)
-  "Parse JSON response from BUFFER and return as Lisp object."
+(defun org-trello-ng-api--parse-status (buffer)
+  "Extract HTTP status code from BUFFER as an integer."
   (with-current-buffer buffer
     (goto-char (point-min))
-    (re-search-forward "^$" nil t)
-    (let ((json-object-type 'plist)
-          (json-array-type 'list))
-      (json-read))))
+    (if (re-search-forward "^HTTP/[0-9.]+ \\([0-9]+\\)" (line-end-position) t)
+        (string-to-number (match-string 1))
+      0)))
+
+(defun org-trello-ng-api--handle-response (buffer)
+  "Parse response from BUFFER; signal an error for non-2xx status codes.
+Returns the parsed JSON body as a Lisp object on success."
+  (let ((status (org-trello-ng-api--parse-status buffer)))
+    (with-current-buffer buffer
+      (goto-char (point-min))
+      (re-search-forward "^$" nil t)
+      (let* ((json-object-type 'plist)
+             (json-array-type 'list)
+             (body (condition-case nil (json-read) (error nil))))
+        (cond
+         ((<= 200 status 299)
+          body)
+         ((<= 400 status 499)
+          (signal 'org-trello-ng-api-client-error
+                  (list :status status :body body)))
+         ((<= 500 status 599)
+          (signal 'org-trello-ng-api-server-error
+                  (list :status status :body body)))
+         (t
+          (signal 'org-trello-ng-api-error
+                  (list :status status :body body))))))))
 
 (defun org-trello-ng-api-get (endpoint &optional params)
   "Make GET request to ENDPOINT with optional PARAMS.
