@@ -150,10 +150,11 @@ This runs quality gates (`make all`), rebases onto `origin/main`, pushes task da
 
 Or run steps individually:
 
-1. File issues (`bd create`) for remaining or discovered follow-up work
-2. `make all` — run quality gates
-3. `git fetch origin --prune && git rebase origin/main`
-4. `bd dolt push && git push -u origin HEAD`
-5. `make pr BEADS_ID=<id>` — create or reuse the PR (idempotent)
-6. `bd close <id> --reason "Done" --json` — only after push and PR succeed
-7. Hand off context for the next session, including bead id, branch name, and PR URL
+1. `make all` — run quality gates
+2. `git fetch origin --prune && git rebase origin/main`
+3. `bd dolt push && git push -u origin HEAD`
+4. `make pr BEADS_ID=<id>` — create or reuse the PR (idempotent)
+5. `bd close <id> --reason "Done" --json` — only after push and PR succeed
+6. Hand off context for the next session, including bead id, branch name, and PR URL
+7. File issues (`bd create`) for remaining or discovered follow-up work
+   - verify that the issue was created with `bd list --id`
