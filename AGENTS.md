@@ -72,18 +72,31 @@ bd dolt remote list                    # List configured remotes
 
 **Useful flags**: `--readonly` (block writes), `--sandbox` (disable auto-sync), `--dolt-auto-commit batch` (defer commits). Run `bd dolt --help` for full reference.
 
+### Shared Dolt Server (multi-worktree)
+
+All git worktrees share a **single** dolt server instance hosted by the main repo on port `3307`. This ensures that `bd update <id> --claim` is transactionally visible across all concurrent agent sessions.
+
+- **Main repo** owns the dolt server and data directory (`.beads/dolt/`).
+- **Worktrees** connect to the main repo's server; they do **not** run their own.
+- `make setup` auto-detects whether it is running in the main repo or a worktree and configures accordingly.
+- **Always run `make setup` in the main repo first** before setting up any worktree.
+- Do **NOT** run `bd dolt start` or `bd dolt stop` from a worktree.
+
 ### Workspace Bootstrap (fresh clone or git worktree)
 
-Run `make setup` to bootstrap beads/dolt. It handles dolt init, remote configuration, data fetch, and server restart. Requires `dolt` and `bd` on `PATH`; will prompt `dolt login` if no DoltHub credentials exist.
+Run `make setup` to bootstrap beads/dolt. It handles dolt init, remote configuration, data fetch, and server restart. In a worktree, it connects to the main repo's shared dolt server instead.
+
+Requires `dolt` and `bd` on `PATH`; will prompt `dolt login` if no DoltHub credentials exist.
 
 ```bash
 bd ready --json          # If this works, bootstrap is already done
-make setup               # Otherwise, run this
+make setup               # Otherwise, run this (main repo FIRST, then worktrees)
 ```
 
 ### Troubleshooting
 
-- **`bd ready` fails with "database not found"**: Re-run `make setup`.
+- **`bd ready` fails with "database not found"**: Re-run `make setup` (main repo first, then worktree).
+- **`bd dolt test` fails in a worktree**: The shared dolt server in the main repo is not running. Run `make setup` in the main repo to start it.
 - **`bd dolt push` fails with "no common ancestor" or "PermissionDenied"**:
   1. Verify remote: `cd .beads/dolt/org_trello_ng && dolt remote -v`
   2. Force-push via SQL: `mysql -h 127.0.0.1 -P <port> -u root -e "CALL dolt_push('--force', 'origin', 'main');" org_trello_ng`

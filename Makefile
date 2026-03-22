@@ -38,6 +38,11 @@ clean:
 DOLT_REMOTE := https://doltremoteapi.dolthub.com/gojun077/org_trello_ng
 DOLT_DB     := org_trello_ng
 DOLT_DIR    := .beads/dolt
+DOLT_PORT   := 3307
+
+# Derive the main repo root from git's common dir (works in worktrees too)
+MAIN_REPO   := $(shell git rev-parse --git-common-dir | sed 's|/\.git$$||')
+IS_WORKTREE := $(shell [ "$$(git rev-parse --git-common-dir)" = ".git" ] && echo no || echo yes)
 
 setup:
 	@echo "==> Checking prerequisites..."
@@ -50,7 +55,15 @@ setup:
 	else \
 		echo "    DoltHub credentials found, skipping login."; \
 	fi
-	@echo "==> Initializing dolt server root in $(DOLT_DIR)..."
+ifeq ($(IS_WORKTREE),yes)
+	@echo "==> Worktree detected. Connecting to shared dolt server in main repo..."
+	@echo "    Main repo: $(MAIN_REPO)"
+	bd dolt set port $(DOLT_PORT)
+	bd dolt set data-dir $(MAIN_REPO)/$(DOLT_DIR)
+	@echo "==> Testing connection to shared dolt server..."
+	@bd dolt test || { echo "ERROR: Cannot reach shared dolt server. Run 'make setup' in the main repo first."; exit 1; }
+else
+	@echo "==> Main repo detected. Initializing dolt server root in $(DOLT_DIR)..."
 	@mkdir -p $(DOLT_DIR)
 	@if [ ! -d "$(DOLT_DIR)/.dolt" ]; then \
 		cd $(DOLT_DIR) && dolt init --name "org-trello-ng" --email "noreply@org-trello-ng"; \
@@ -74,9 +87,12 @@ setup:
 		fi
 	@echo "==> Fetching data from DoltHub and resetting to remote/main..."
 	@cd $(DOLT_DIR)/$(DOLT_DB) && dolt fetch origin && dolt reset --hard remotes/origin/main
+	@echo "==> Pinning dolt server port to $(DOLT_PORT)..."
+	bd dolt set port $(DOLT_PORT) --update-config
 	@echo "==> Restarting dolt server via bd..."
 	@bd dolt stop  2>/dev/null || true
 	@bd dolt start
+endif
 	@echo "==> Running bd doctor --fix..."
 	@bd doctor --fix --yes
 	@echo "==> Configuring beads role..."

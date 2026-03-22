@@ -67,6 +67,7 @@ sync-branch: "beads-sync"
 # - github.repo
 
 dolt.database: "org_trello_ng"
+dolt.port: 3307
 
 # DoltHub remote for task graph persistence
 # On fresh clone: dolt login, then from .beads/dolt/:
