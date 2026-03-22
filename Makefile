@@ -50,15 +50,22 @@ setup:
 	else \
 		echo "    DoltHub credentials found, skipping login."; \
 	fi
-	@echo "==> Initializing dolt repo in $(DOLT_DIR)..."
+	@echo "==> Initializing dolt server root in $(DOLT_DIR)..."
 	@mkdir -p $(DOLT_DIR)
 	@if [ ! -d "$(DOLT_DIR)/.dolt" ]; then \
 		cd $(DOLT_DIR) && dolt init --name "org-trello-ng" --email "noreply@org-trello-ng"; \
 	else \
 		echo "    $(DOLT_DIR)/.dolt already exists, skipping init."; \
 	fi
-	@echo "==> Configuring dolt remote..."
-	@cd $(DOLT_DIR) && \
+	@echo "==> Initializing database repo in $(DOLT_DIR)/$(DOLT_DB)..."
+	@mkdir -p $(DOLT_DIR)/$(DOLT_DB)
+	@if [ ! -d "$(DOLT_DIR)/$(DOLT_DB)/.dolt" ]; then \
+		cd $(DOLT_DIR)/$(DOLT_DB) && dolt init --name "org-trello-ng" --email "noreply@org-trello-ng"; \
+	else \
+		echo "    $(DOLT_DIR)/$(DOLT_DB)/.dolt already exists, skipping init."; \
+	fi
+	@echo "==> Configuring dolt remote on database repo..."
+	@cd $(DOLT_DIR)/$(DOLT_DB) && \
 		if ! dolt remote -v 2>/dev/null | grep -q origin; then \
 			dolt remote add origin $(DOLT_REMOTE); \
 			echo "    Added remote 'origin'."; \
@@ -66,7 +73,7 @@ setup:
 			echo "    Remote 'origin' already configured."; \
 		fi
 	@echo "==> Fetching data from DoltHub and resetting to remote/main..."
-	@cd $(DOLT_DIR) && dolt fetch origin && dolt reset --hard remotes/origin/main
+	@cd $(DOLT_DIR)/$(DOLT_DB) && dolt fetch origin && dolt reset --hard remotes/origin/main
 	@echo "==> Restarting dolt server via bd..."
 	@bd dolt stop  2>/dev/null || true
 	@bd dolt start
