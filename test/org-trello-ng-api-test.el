@@ -40,6 +40,37 @@
       (should (equal (plist-get result :id) "abc123"))
       (should (equal (plist-get result :name) "Test Card")))))
 
+(ert-deftest org-trello-ng-api-test-delete-mock ()
+  "Test DELETE wrapper with mocked HTTP call."
+  (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+             (lambda () '(:key "fake-key" :token "fake-token")))
+            ((symbol-function 'url-retrieve-synchronously)
+             (lambda (_url &rest _args)
+               (let ((buf (generate-new-buffer " *test-delete*")))
+                 (with-current-buffer buf
+                   (insert "HTTP/1.1 200 OK\n")
+                   (insert "Content-Type: application/json\n")
+                   (insert "\n")
+                   (insert "{\"_value\":null}"))
+                 buf))))
+    (let ((result (org-trello-ng-api-delete "/cards/abc123")))
+      (should result))))
+
+(ert-deftest org-trello-ng-api-test-delete-error ()
+  "Test DELETE wrapper signals error for 404."
+  (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+             (lambda () '(:key "fake-key" :token "fake-token")))
+            ((symbol-function 'url-retrieve-synchronously)
+             (lambda (_url &rest _args)
+               (let ((buf (generate-new-buffer " *test-delete-err*")))
+                 (with-current-buffer buf
+                   (insert "HTTP/1.1 404 Not Found\n\n")
+                   (insert "{\"message\":\"card not found\"}"))
+                 buf))))
+    (let ((err (should-error (org-trello-ng-api-delete "/cards/nonexistent")
+                             :type 'org-trello-ng-api-client-error)))
+      (should (= (plist-get (cdr err) :status) 404)))))
+
 (ert-deftest org-trello-ng-api-test-batch-get-mock ()
   "Test batch GET with mocked HTTP call."
   (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
