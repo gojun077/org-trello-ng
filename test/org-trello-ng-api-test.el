@@ -40,6 +40,43 @@
       (should (equal (plist-get result :id) "abc123"))
       (should (equal (plist-get result :name) "Test Card")))))
 
+(ert-deftest org-trello-ng-api-test-put-mock ()
+  "Test PUT wrapper with mocked HTTP call."
+  (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+             (lambda () '(:key "fake-key" :token "fake-token")))
+            ((symbol-function 'url-retrieve-synchronously)
+             (lambda (_url &rest _args)
+               (let ((buf (generate-new-buffer " *test-put*")))
+                 (with-current-buffer buf
+                   (insert "HTTP/1.1 200 OK\n")
+                   (insert "Content-Type: application/json\n")
+                   (insert "\n")
+                   (insert "{\"id\":\"card1\",\"name\":\"Updated Card\"}"))
+                 buf))))
+    (let ((result (org-trello-ng-api-put "/cards/card1"
+                                          '((name . "Updated Card")))))
+      (should result)
+      (should (equal (plist-get result :id) "card1"))
+      (should (equal (plist-get result :name) "Updated Card")))))
+
+(ert-deftest org-trello-ng-api-test-put-sends-put-method ()
+  "Test that PUT wrapper uses PUT HTTP method."
+  (let ((captured-method nil))
+    (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+               (lambda () '(:key "fake-key" :token "fake-token")))
+              ((symbol-function 'url-retrieve-synchronously)
+               (lambda (_url &rest _args)
+                 (setq captured-method url-request-method)
+                 (let ((buf (generate-new-buffer " *test-put-method*")))
+                   (with-current-buffer buf
+                     (insert "HTTP/1.1 200 OK\n")
+                     (insert "Content-Type: application/json\n")
+                     (insert "\n")
+                     (insert "{\"id\":\"x\"}"))
+                   buf))))
+      (org-trello-ng-api-put "/cards/x" '((name . "X")))
+      (should (equal captured-method "PUT")))))
+
 (ert-deftest org-trello-ng-api-test-delete-mock ()
   "Test DELETE wrapper with mocked HTTP call."
   (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
@@ -68,7 +105,7 @@
                    (insert "{\"message\":\"card not found\"}"))
                  buf))))
     (let ((err (should-error (org-trello-ng-api-delete "/cards/nonexistent")
-                             :type 'org-trello-ng-api-client-error)))
+                              :type 'org-trello-ng-api-client-error)))
       (should (= (plist-get (cdr err) :status) 404)))))
 
 (ert-deftest org-trello-ng-api-test-batch-get-mock ()
