@@ -74,74 +74,20 @@ bd dolt remote list                    # List configured remotes
 
 ### Workspace Bootstrap (fresh clone or git worktree)
 
-New workspaces — whether created via `git clone` or `git worktree add` — have a `.beads/dolt/` directory with an empty Dolt repo (no remote, no data). The Dolt server may already be running but it won't find the database. **You must bootstrap before `bd ready` will work.**
-
-#### Quick diagnosis
+Run `make setup` to bootstrap beads/dolt. It handles dolt init, remote configuration, data fetch, and server restart. Requires `dolt` and `bd` on `PATH`; will prompt `dolt login` if no DoltHub credentials exist.
 
 ```bash
-bd ready --json          # If this works, skip bootstrap
-bd dolt status           # Check if dolt server is running and which port/data dir
+bd ready --json          # If this works, bootstrap is already done
+make setup               # Otherwise, run this
 ```
-
-If `bd ready` fails with `"database not found on Dolt server"`, follow the steps below.
-
-#### Step-by-step bootstrap
-
-1. **Check if a remote already exists** (run from `.beads/dolt/`):
-   ```bash
-   cd .beads/dolt && dolt remote -v
-   ```
-   If no remote is listed, add one:
-   ```bash
-   dolt remote add origin https://doltremoteapi.dolthub.com/gojun077/org_trello_ng
-   ```
-   (If `dolt login` hasn't been run on this machine, do that first.)
-
-2. **Fetch and reset to remote data** (still in `.beads/dolt/`):
-   ```bash
-   dolt fetch origin
-   dolt reset --hard remotes/origin/main
-   ```
-   > **Note:** `dolt pull` will fail with "no common ancestor" on a fresh init — always use `fetch` + `reset --hard` instead.
-
-3. **Fix the database name mapping** — this is the most common cause of "database not found" errors. The Dolt server names the database after the directory, but on worktrees/clones the mapping may be missing:
-   ```bash
-   bd dolt set database org_trello_ng --update-config
-   ```
-   This updates both `metadata.json` and `dolt.database` in `.beads/config.yaml`.
-
-4. **Restart the Dolt server** to pick up the new data and name:
-   ```bash
-   bd dolt stop && bd dolt start
-   ```
-
-5. **Verify** — `bd ready` should now return tasks:
-   ```bash
-   bd ready --json                    # Should list tasks from remote
-   bd dolt push                       # Should succeed
-   ```
-
-> **TL;DR one-liner** (from the workspace root, if `dolt login` is already done):
-> ```bash
-> cd .beads/dolt && dolt remote add origin https://doltremoteapi.dolthub.com/gojun077/org_trello_ng && dolt fetch origin && dolt reset --hard remotes/origin/main && cd ../.. && bd dolt set database org_trello_ng --update-config && bd dolt stop && bd dolt start && bd ready --json
-> ```
-
-#### Note on `bd doctor --fix`
-
-`bd doctor --fix --yes` does **not** resolve the "database not found" error. It can fix file permissions and other minor issues, but the remote-add / fetch / database-name steps above must be done manually.
 
 ### Troubleshooting
 
-- **`bd ready` / any `bd` command fails with "database not found on Dolt server"**:
-  1. Run the bootstrap steps above — most likely the database name mapping is missing.
-  2. Confirm `dolt.database` in `.beads/config.yaml` is set to `"org_trello_ng"`.
-  3. Fix with: `bd dolt set database org_trello_ng --update-config` then restart: `bd dolt stop && bd dolt start`.
-
+- **`bd ready` fails with "database not found"**: Re-run `make setup`.
 - **`bd dolt push` fails with "no common ancestor" or "PermissionDenied"**:
-  1. Verify the CLI-level remote exists: `dolt remote -v` (run from `.beads/dolt/`)
-  2. If missing, add it: `dolt remote add origin <url>` (get URL from `bd dolt remote list`)
-  3. Force-push through SQL to reconcile: `mysql -h 127.0.0.1 -P <port> -u root -e "CALL dolt_push('--force', 'origin', 'main');" <db>`
-  4. After that, `bd dolt push` should work normally.
+  1. Verify remote: `cd .beads/dolt/org_trello_ng && dolt remote -v`
+  2. Force-push via SQL: `mysql -h 127.0.0.1 -P <port> -u root -e "CALL dolt_push('--force', 'origin', 'main');" org_trello_ng`
+  3. After that, `bd dolt push` should work normally.
 <!-- END BEADS INTEGRATION -->
 
 ## Session Completion
