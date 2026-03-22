@@ -111,7 +111,7 @@ On a fresh clone the local dolt repo under `.beads/dolt/` has no remote and no d
   2. If missing, add it: `dolt remote add origin <url>` (get URL from `bd dolt remote list`)
   3. Force-push through SQL to reconcile: `mysql -h 127.0.0.1 -P <port> -u root -e "CALL dolt_push('--force', 'origin', 'main');" <db>`
   4. After that, `bd dolt push` should work normally.
-- **`bd` can't find the database** ("database not found on Dolt server"): The dolt server names the database after the directory (i.e. `dolt`). Ensure `dolt.database` in `.beads/config.yaml` is set to `"dolt"`. Fix with: `bd dolt set database dolt --update-config`
+- **`bd` can't find the database** ("database not found on Dolt server"): The dolt server names the database after the directory (i.e. `org_trello_ng`). Ensure `dolt.database` in `.beads/config.yaml` is set to `"org_trello_ng"`. Fix with: `bd dolt set database org_trello_ng --update-config`
 <!-- END BEADS INTEGRATION -->
 
 ## Session Completion
