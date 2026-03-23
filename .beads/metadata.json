@@ -2,6 +2,7 @@
   "database": "dolt",
   "backend": "dolt",
   "dolt_mode": "server",
+  "dolt_server_port": 3307,
   "dolt_database": "org_trello_ng",
   "project_id": "3eaf5c5c-57a4-417e-ae28-cea50f75e82c"
 }
