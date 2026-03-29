@@ -30,6 +30,29 @@
 ;; keywords, making them accessible via `org-entry-get' with the
 ;; special point-or-marker argument nil (file-level) and readable
 ;; without expanding drawers.
+;;
+;; Per-heading :PROPERTIES: drawer schema
+;; ======================================
+;; Each org heading representing a Trello card carries its own
+;; :PROPERTIES: drawer with the following fields:
+;;
+;;   :PROPERTIES:
+;;   :card-id:  <Trello card UUID>
+;;   :board-id: <Trello board UUID>
+;;   :sha1:     <SHA-1 hash of the heading text + body>
+;;   :card-pos: <numeric position on the Trello list>
+;;   :END:
+;;
+;; - card-id   — the Trello card UUID; set after first sync.
+;; - board-id  — the Trello board UUID this card belongs to.
+;; - sha1      — SHA-1 hash of the org heading text and body,
+;;               used to skip syncing tasks that have not changed.
+;; - card-pos  — optional; numeric position of the card in its
+;;               Trello list, used to preserve ordering.
+;;
+;; These properties are local-only metadata; they are never synced
+;; to Trello.  They are read/written via `org-entry-get' and
+;; `org-entry-put' at heading level.
 
 ;;; Code:
 
@@ -53,6 +76,35 @@ For example: list-TODO, list-Anywhere, list-DONE, list-Canceled.")
         org-trello-ng-buffer-board-name-prop
         org-trello-ng-buffer-user-id-prop)
   "Required file-level property names (excluding dynamic list-* entries).")
+
+;;; Per-heading property constants
+
+(defconst org-trello-ng-buffer-card-id-prop "card-id"
+  "Property name for the Trello card UUID on a heading.")
+
+(defconst org-trello-ng-buffer-heading-board-id-prop "board-id"
+  "Property name for the Trello board UUID on a heading.")
+
+(defconst org-trello-ng-buffer-sha1-prop "sha1"
+  "Property name for the SHA-1 hash of the heading content.
+Used to detect whether an org task has changed since the last sync.")
+
+(defconst org-trello-ng-buffer-card-pos-prop "card-pos"
+  "Property name for the card position on its Trello list.
+Optional; used to preserve card ordering.")
+
+(defconst org-trello-ng-buffer-heading-props
+  (list org-trello-ng-buffer-card-id-prop
+        org-trello-ng-buffer-heading-board-id-prop
+        org-trello-ng-buffer-sha1-prop
+        org-trello-ng-buffer-card-pos-prop)
+  "All per-heading property names for Trello card metadata.")
+
+(defconst org-trello-ng-buffer-heading-required-props
+  (list org-trello-ng-buffer-card-id-prop
+        org-trello-ng-buffer-heading-board-id-prop
+        org-trello-ng-buffer-sha1-prop)
+  "Required per-heading property names (card-pos is optional).")
 
 (provide 'org-trello-ng-buffer)
 ;;; org-trello-ng-buffer.el ends here
