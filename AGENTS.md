@@ -143,8 +143,10 @@ Each git worktree (e.g. `org-trello-ng-worker-0`, `-1`, `-2`) starts from a deta
 
 Run the full completion sequence in one step:
 ```bash
-make finish BEADS_ID=<id>
+make finish BEADS_ID=<id> PR_DESCRIPTION="A concise summary of what was changed and why"
 ```
+
+The `PR_DESCRIPTION` variable is **required** and must be written by the agent — it should be a clear, human-readable summary of the changes (not pulled from bead metadata). The PR body will also include the bead task title and a list of commits automatically.
 
 This runs quality gates (`make all`), rebases onto `origin/main`, pushes task data and code, creates or reuses a GitHub PR (idempotent), and closes the bead — in that order. If any step fails, it stops.
 
@@ -153,7 +155,7 @@ Or run steps individually:
 1. `make all` — run quality gates
 2. `git fetch origin --prune && git rebase origin/main`
 3. `bd dolt push && git push -u origin HEAD`
-4. `make pr BEADS_ID=<id>` — create or reuse the PR (idempotent)
+4. `make pr BEADS_ID=<id> PR_DESCRIPTION="summary of changes"` — create or reuse the PR (idempotent)
 5. `bd close <id> --reason "Done" --json` — only after push and PR succeed
 6. Hand off context for the next session, including bead id, branch name, and PR URL
 7. File issues (`bd create`) for remaining or discovered follow-up work
