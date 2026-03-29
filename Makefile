@@ -172,6 +172,19 @@ endif
 	@$(MAKE) pr BEADS_ID=$(BEADS_ID)
 	@echo "==> Closing bead $(BEADS_ID)..."
 	bd close $(BEADS_ID) --reason "Done" --json
+	@echo "==> Checking if parent epic can be closed..."
+	@PARENT_ID=$$(bd show $(BEADS_ID) --json | jq -r '.[0].parent // empty'); \
+	if [ -n "$$PARENT_ID" ]; then \
+		CLOSEABLE=$$(bd show "$$PARENT_ID" --json | jq -r '.[0].epic_closeable // false'); \
+		if [ "$$CLOSEABLE" = "true" ]; then \
+			echo "All sub-tasks of $$PARENT_ID are done. Closing epic..."; \
+			bd close "$$PARENT_ID" --reason "All sub-tasks complete" --json; \
+		else \
+			echo "Parent epic $$PARENT_ID still has open sub-tasks."; \
+		fi; \
+	else \
+		echo "No parent epic found for $(BEADS_ID)."; \
+	fi
 	@echo ""
 	@echo "Session complete. Branch: $$(git branch --show-current)"
 	@echo ""

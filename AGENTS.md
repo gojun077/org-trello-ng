@@ -158,3 +158,8 @@ Or run steps individually:
 6. Hand off context for the next session, including bead id, branch name, and PR URL
 7. File issues (`bd create`) for remaining or discovered follow-up work
    - verify that the issue was created with `bd list --id`
+8. **Close parent epic if all sub-tasks are done:**
+   ```bash
+   bd show <epic-id> --json  # Check epic_closeable field
+   bd close <epic-id> --reason "All sub-tasks complete" --json
+   ```
