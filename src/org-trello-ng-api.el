@@ -179,6 +179,42 @@ Return a flat list of response objects, one per endpoint."
         (setq endpoints rest)))
     results))
 
+(defvar org-trello-ng-api-page-size 100
+  "Default page size for paginated Trello API requests.
+Trello allows up to 1000, but 100 is a safe default.")
+
+(defun org-trello-ng-api-get-paginated (endpoint &optional params page-size)
+  "Fetch all results from ENDPOINT using cursor-based pagination.
+PARAMS is an optional list of query parameter pairs.
+PAGE-SIZE overrides `org-trello-ng-api-page-size'.
+
+Trello paginates by card ID: the API returns the newest items first,
+and the `before' parameter fetches items created before a given card ID.
+This function walks backwards through the full result set and returns
+all items as a single flat list."
+  (let* ((limit (or page-size org-trello-ng-api-page-size))
+         (all-results '())
+         (before-id nil)
+         (done nil))
+    (while (not done)
+      (let* ((page-params (append params
+                                  (list (list "limit" (number-to-string limit)))
+                                  (when before-id
+                                    (list (list "before" before-id)))))
+             (page (org-trello-ng-api-get endpoint page-params)))
+        (if (or (null page) (not (listp page)))
+            (setq done t)
+          (setq all-results (append all-results page))
+          (if (< (length page) limit)
+              (setq done t)
+            (let ((last-item (car (last page))))
+              (setq before-id
+                    (cond
+                     ((and (listp last-item) (plist-get last-item :id))
+                      (plist-get last-item :id))
+                     (t (setq done t) nil))))))))
+    all-results))
+
 (defun org-trello-ng-api-get-my-boards ()
   "Fetch all boards for the authenticated user."
   (org-trello-ng-api-get "/members/me/boards"))

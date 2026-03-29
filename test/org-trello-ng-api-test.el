@@ -395,5 +395,126 @@
           (should (equal (plist-get result :id) "card1"))
           (should (= call-count 2)))))))
 
+;;; Pagination tests
+
+(ert-deftest org-trello-ng-api-test-paginated-single-page ()
+  "Test pagination when all results fit in one page."
+  (let ((call-count 0))
+    (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+               (lambda () '(:key "fake-key" :token "fake-token")))
+              ((symbol-function 'url-retrieve-synchronously)
+               (lambda (_url &rest _args)
+                 (setq call-count (1+ call-count))
+                 (let ((buf (generate-new-buffer " *test-page-single*")))
+                   (with-current-buffer buf
+                     (insert "HTTP/1.1 200 OK\n")
+                     (insert "Content-Type: application/json\n\n")
+                     (insert "[{\"id\":\"card1\",\"name\":\"A\"}")
+                     (insert ",{\"id\":\"card2\",\"name\":\"B\"}]"))
+                   buf))))
+      (let* ((org-trello-ng-api-page-size 5)
+             (result (org-trello-ng-api-get-paginated "/boards/b1/cards")))
+        (should (= (length result) 2))
+        (should (equal (plist-get (car result) :id) "card1"))
+        (should (= call-count 1))))))
+
+(ert-deftest org-trello-ng-api-test-paginated-multiple-pages ()
+  "Test pagination that spans multiple pages."
+  (let ((call-count 0))
+    (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+               (lambda () '(:key "fake-key" :token "fake-token")))
+              ((symbol-function 'url-retrieve-synchronously)
+               (lambda (url &rest _args)
+                 (setq call-count (1+ call-count))
+                 (let ((buf (generate-new-buffer " *test-page-multi*")))
+                   (with-current-buffer buf
+                     (insert "HTTP/1.1 200 OK\n")
+                     (insert "Content-Type: application/json\n\n")
+                     (cond
+                      ((= call-count 1)
+                       (insert "[{\"id\":\"card3\",\"name\":\"C\"}")
+                       (insert ",{\"id\":\"card2\",\"name\":\"B\"}]"))
+                      ((= call-count 2)
+                       (insert "[{\"id\":\"card1\",\"name\":\"A\"}]"))))
+                   buf))))
+      (let* ((org-trello-ng-api-page-size 2)
+             (result (org-trello-ng-api-get-paginated "/boards/b1/cards")))
+        (should (= (length result) 3))
+        (should (equal (plist-get (car result) :id) "card3"))
+        (should (equal (plist-get (nth 2 result) :id) "card1"))
+        (should (= call-count 2))))))
+
+(ert-deftest org-trello-ng-api-test-paginated-uses-before-param ()
+  "Test that pagination passes 'before' param with last card ID."
+  (let ((captured-urls '()))
+    (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+               (lambda () '(:key "fake-key" :token "fake-token")))
+              ((symbol-function 'url-retrieve-synchronously)
+               (lambda (url &rest _args)
+                 (push url captured-urls)
+                 (let ((buf (generate-new-buffer " *test-page-before*")))
+                   (with-current-buffer buf
+                     (insert "HTTP/1.1 200 OK\n")
+                     (insert "Content-Type: application/json\n\n")
+                     (if (= (length captured-urls) 1)
+                         (insert "[{\"id\":\"c2\",\"name\":\"B\"},{\"id\":\"c1\",\"name\":\"A\"}]")
+                       (insert "[]")))
+                   buf))))
+      (let ((org-trello-ng-api-page-size 2))
+        (org-trello-ng-api-get-paginated "/boards/b1/cards")
+        (setq captured-urls (nreverse captured-urls))
+        (should (= (length captured-urls) 2))
+        (should-not (string-match-p "before=" (nth 0 captured-urls)))
+        (should (string-match-p "before=c1" (nth 1 captured-urls)))))))
+
+(ert-deftest org-trello-ng-api-test-paginated-empty-result ()
+  "Test pagination with empty result set."
+  (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+             (lambda () '(:key "fake-key" :token "fake-token")))
+            ((symbol-function 'url-retrieve-synchronously)
+             (lambda (_url &rest _args)
+               (let ((buf (generate-new-buffer " *test-page-empty*")))
+                 (with-current-buffer buf
+                   (insert "HTTP/1.1 200 OK\n")
+                   (insert "Content-Type: application/json\n\n[]"))
+                 buf))))
+    (let ((result (org-trello-ng-api-get-paginated "/boards/b1/cards")))
+      (should (null result)))))
+
+(ert-deftest org-trello-ng-api-test-paginated-custom-page-size ()
+  "Test that custom page-size is passed as limit param."
+  (let ((captured-url nil))
+    (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+               (lambda () '(:key "fake-key" :token "fake-token")))
+              ((symbol-function 'url-retrieve-synchronously)
+               (lambda (url &rest _args)
+                 (setq captured-url url)
+                 (let ((buf (generate-new-buffer " *test-page-size*")))
+                   (with-current-buffer buf
+                     (insert "HTTP/1.1 200 OK\n")
+                     (insert "Content-Type: application/json\n\n[]"))
+                   buf))))
+      (org-trello-ng-api-get-paginated "/boards/b1/cards" nil 50)
+      (should (string-match-p "limit=50" captured-url)))))
+
+(ert-deftest org-trello-ng-api-test-paginated-preserves-extra-params ()
+  "Test that extra params are preserved across pages."
+  (let ((captured-url nil))
+    (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+               (lambda () '(:key "fake-key" :token "fake-token")))
+              ((symbol-function 'url-retrieve-synchronously)
+               (lambda (url &rest _args)
+                 (setq captured-url url)
+                 (let ((buf (generate-new-buffer " *test-page-params*")))
+                   (with-current-buffer buf
+                     (insert "HTTP/1.1 200 OK\n")
+                     (insert "Content-Type: application/json\n\n[]"))
+                   buf))))
+      (org-trello-ng-api-get-paginated "/boards/b1/cards"
+                                       '(("fields" "id,name")
+                                         ("filter" "open")))
+      (should (string-match-p "fields=id" captured-url))
+      (should (string-match-p "filter=open" captured-url)))))
+
 (provide 'org-trello-ng-api-test)
 ;;; org-trello-ng-api-test.el ends here
