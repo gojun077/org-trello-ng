@@ -242,7 +242,7 @@
       (kill-buffer buf))))
 
 (ert-deftest org-trello-ng-api-test-handle-response-429 ()
-  "Test handle-response signals client error for 429 rate limit."
+  "Test handle-response signals rate-limit error for 429."
   (let ((buf (generate-new-buffer " *test-429*")))
     (unwind-protect
         (progn
@@ -251,8 +251,20 @@
             (insert "\"Rate limit exceeded\""))
           (let ((err (should-error
                       (org-trello-ng-api--handle-response buf)
-                      :type 'org-trello-ng-api-client-error)))
+                      :type 'org-trello-ng-api-rate-limit-error)))
             (should (= (plist-get (cdr err) :status) 429))))
+      (kill-buffer buf))))
+
+(ert-deftest org-trello-ng-api-test-handle-response-429-is-client-error ()
+  "Test that 429 rate-limit error is also a client error (inheritance)."
+  (let ((buf (generate-new-buffer " *test-429-inherit*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buf
+            (insert "HTTP/1.1 429 Too Many Requests\n\n")
+            (insert "\"Rate limit exceeded\""))
+          (should-error (org-trello-ng-api--handle-response buf)
+                        :type 'org-trello-ng-api-client-error))
       (kill-buffer buf))))
 
 (ert-deftest org-trello-ng-api-test-get-signals-on-error ()
@@ -268,6 +280,120 @@
                  buf))))
     (should-error (org-trello-ng-api-get "/boards/invalid")
                   :type 'org-trello-ng-api-client-error)))
+
+;;; Rate-limit retry tests
+
+(ert-deftest org-trello-ng-api-test-retry-succeeds-after-429 ()
+  "Test that retry wrapper retries on 429 and succeeds."
+  (let ((call-count 0))
+    (cl-letf (((symbol-function 'sleep-for) (lambda (_s))))
+      (let ((org-trello-ng-api-max-retries 3)
+            (org-trello-ng-api-retry-base-delay 0.0))
+        (let ((result (org-trello-ng-api--with-retry
+                       (lambda ()
+                         (setq call-count (1+ call-count))
+                         (when (< call-count 3)
+                           (signal 'org-trello-ng-api-rate-limit-error
+                                   (list :status 429 :body nil)))
+                         '(:ok t)))))
+          (should (equal result '(:ok t)))
+          (should (= call-count 3)))))))
+
+(ert-deftest org-trello-ng-api-test-retry-exhausted ()
+  "Test that retry wrapper signals error after max retries."
+  (cl-letf (((symbol-function 'sleep-for) (lambda (_s))))
+    (let ((org-trello-ng-api-max-retries 2)
+          (org-trello-ng-api-retry-base-delay 0.0)
+          (call-count 0))
+      (should-error
+       (org-trello-ng-api--with-retry
+        (lambda ()
+          (setq call-count (1+ call-count))
+          (signal 'org-trello-ng-api-rate-limit-error
+                  (list :status 429 :body nil))))
+       :type 'org-trello-ng-api-rate-limit-error)
+      (should (= call-count 3)))))
+
+(ert-deftest org-trello-ng-api-test-retry-no-retry-on-other-errors ()
+  "Test that retry wrapper does not retry on non-429 errors."
+  (let ((call-count 0))
+    (should-error
+     (org-trello-ng-api--with-retry
+      (lambda ()
+        (setq call-count (1+ call-count))
+        (signal 'org-trello-ng-api-client-error
+                (list :status 400 :body nil))))
+     :type 'org-trello-ng-api-client-error)
+    (should (= call-count 1))))
+
+(ert-deftest org-trello-ng-api-test-retry-exponential-delays ()
+  "Test that retry uses exponential backoff delays."
+  (let ((delays '())
+        (call-count 0))
+    (cl-letf (((symbol-function 'sleep-for)
+               (lambda (s) (push s delays))))
+      (let ((org-trello-ng-api-max-retries 3)
+            (org-trello-ng-api-retry-base-delay 1.0)
+            (org-trello-ng-api-retry-max-delay 30.0))
+        (org-trello-ng-api--with-retry
+         (lambda ()
+           (setq call-count (1+ call-count))
+           (when (< call-count 4)
+             (signal 'org-trello-ng-api-rate-limit-error
+                     (list :status 429 :body nil)))
+           :done))
+        (setq delays (nreverse delays))
+        (should (= (length delays) 3))
+        (should (= (nth 0 delays) 1.0))
+        (should (= (nth 1 delays) 2.0))
+        (should (= (nth 2 delays) 4.0))))))
+
+(ert-deftest org-trello-ng-api-test-retry-max-delay-cap ()
+  "Test that retry delay is capped at max-delay."
+  (let ((delays '())
+        (call-count 0))
+    (cl-letf (((symbol-function 'sleep-for)
+               (lambda (s) (push s delays))))
+      (let ((org-trello-ng-api-max-retries 5)
+            (org-trello-ng-api-retry-base-delay 1.0)
+            (org-trello-ng-api-retry-max-delay 3.0))
+        (org-trello-ng-api--with-retry
+         (lambda ()
+           (setq call-count (1+ call-count))
+           (when (< call-count 5)
+             (signal 'org-trello-ng-api-rate-limit-error
+                     (list :status 429 :body nil)))
+           :done))
+        (setq delays (nreverse delays))
+        (should (= (nth 0 delays) 1.0))
+        (should (= (nth 1 delays) 2.0))
+        (should (= (nth 2 delays) 3.0))
+        (should (= (nth 3 delays) 3.0))))))
+
+(ert-deftest org-trello-ng-api-test-get-retries-on-429 ()
+  "Test that api-get retries on 429 via the retry wrapper."
+  (let ((call-count 0))
+    (cl-letf (((symbol-function 'org-trello-ng-auth-get-credentials)
+               (lambda () '(:key "fake-key" :token "fake-token")))
+              ((symbol-function 'url-retrieve-synchronously)
+               (lambda (_url &rest _args)
+                 (setq call-count (1+ call-count))
+                 (let ((buf (generate-new-buffer " *test-retry-get*")))
+                   (with-current-buffer buf
+                     (if (< call-count 2)
+                         (progn
+                           (insert "HTTP/1.1 429 Too Many Requests\n\n")
+                           (insert "\"Rate limit exceeded\""))
+                       (insert "HTTP/1.1 200 OK\n")
+                       (insert "Content-Type: application/json\n\n")
+                       (insert "{\"id\":\"card1\"}")))
+                   buf)))
+              ((symbol-function 'sleep-for) (lambda (_s))))
+      (let ((org-trello-ng-api-max-retries 3)
+            (org-trello-ng-api-retry-base-delay 0.0))
+        (let ((result (org-trello-ng-api-get "/cards/card1")))
+          (should (equal (plist-get result :id) "card1"))
+          (should (= call-count 2)))))))
 
 (provide 'org-trello-ng-api-test)
 ;;; org-trello-ng-api-test.el ends here

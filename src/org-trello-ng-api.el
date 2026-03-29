@@ -19,8 +19,19 @@
 (define-error 'org-trello-ng-api-error "Trello API error")
 (define-error 'org-trello-ng-api-client-error "Trello API client error (4xx)"
   'org-trello-ng-api-error)
+(define-error 'org-trello-ng-api-rate-limit-error "Trello API rate limit (429)"
+  'org-trello-ng-api-client-error)
 (define-error 'org-trello-ng-api-server-error "Trello API server error (5xx)"
   'org-trello-ng-api-error)
+
+(defvar org-trello-ng-api-max-retries 5
+  "Maximum number of retries on HTTP 429 rate-limit responses.")
+
+(defvar org-trello-ng-api-retry-base-delay 1.0
+  "Base delay in seconds for exponential backoff on 429 responses.")
+
+(defvar org-trello-ng-api-retry-max-delay 30.0
+  "Maximum delay in seconds between retry attempts.")
 
 (defun org-trello-ng-api--build-url (endpoint &optional extra-params)
   "Build full API URL for ENDPOINT with auth and EXTRA-PARAMS."
@@ -56,6 +67,9 @@ Returns the parsed JSON body as a Lisp object on success."
         (cond
          ((<= 200 status 299)
           body)
+         ((= status 429)
+          (signal 'org-trello-ng-api-rate-limit-error
+                  (list :status status :body body)))
          ((<= 400 status 499)
           (signal 'org-trello-ng-api-client-error
                   (list :status status :body body)))
@@ -66,50 +80,84 @@ Returns the parsed JSON body as a Lisp object on success."
           (signal 'org-trello-ng-api-error
                   (list :status status :body body))))))))
 
+(defun org-trello-ng-api--with-retry (fn)
+  "Call FN, retrying with exponential backoff on 429 rate-limit errors.
+FN is a zero-argument function that performs the API call.
+Retries up to `org-trello-ng-api-max-retries' times."
+  (let ((attempt 0)
+        (done nil)
+        result)
+    (while (not done)
+      (condition-case err
+          (progn
+            (setq result (funcall fn))
+            (setq done t))
+        (org-trello-ng-api-rate-limit-error
+         (setq attempt (1+ attempt))
+         (if (> attempt org-trello-ng-api-max-retries)
+             (signal (car err) (cdr err))
+           (let ((delay (min org-trello-ng-api-retry-max-delay
+                             (* org-trello-ng-api-retry-base-delay
+                                (expt 2 (1- attempt))))))
+             (message "org-trello-ng: rate limited (429), retry %d/%d in %.1fs"
+                      attempt org-trello-ng-api-max-retries delay)
+             (sleep-for delay))))))
+    result))
+
 (defun org-trello-ng-api-get (endpoint &optional params)
   "Make GET request to ENDPOINT with optional PARAMS.
-Returns parsed JSON response."
-  (let* ((url (org-trello-ng-api--build-url endpoint params))
-         (buffer (url-retrieve-synchronously url t t 30)))
-    (unwind-protect
-        (org-trello-ng-api--handle-response buffer)
-      (kill-buffer buffer))))
+Returns parsed JSON response.  Retries automatically on 429."
+  (org-trello-ng-api--with-retry
+   (lambda ()
+     (let* ((url (org-trello-ng-api--build-url endpoint params))
+            (buffer (url-retrieve-synchronously url t t 30)))
+       (unwind-protect
+           (org-trello-ng-api--handle-response buffer)
+         (kill-buffer buffer))))))
 
 (defun org-trello-ng-api-post (endpoint body &optional params)
   "Make POST request to ENDPOINT with JSON BODY and optional PARAMS.
-BODY is an alist that will be JSON-encoded.  Returns parsed JSON response."
-  (let* ((url (org-trello-ng-api--build-url endpoint params))
-         (url-request-method "POST")
-         (url-request-extra-headers
-          '(("Content-Type" . "application/json")))
-         (url-request-data (encode-coding-string (json-encode body) 'utf-8))
-         (buffer (url-retrieve-synchronously url t t 30)))
-    (unwind-protect
-        (org-trello-ng-api--handle-response buffer)
-      (kill-buffer buffer))))
+BODY is an alist that will be JSON-encoded.  Returns parsed JSON response.
+Retries automatically on 429."
+  (org-trello-ng-api--with-retry
+   (lambda ()
+     (let* ((url (org-trello-ng-api--build-url endpoint params))
+            (url-request-method "POST")
+            (url-request-extra-headers
+             '(("Content-Type" . "application/json")))
+            (url-request-data (encode-coding-string (json-encode body) 'utf-8))
+            (buffer (url-retrieve-synchronously url t t 30)))
+       (unwind-protect
+           (org-trello-ng-api--handle-response buffer)
+         (kill-buffer buffer))))))
 
 (defun org-trello-ng-api-put (endpoint body &optional params)
   "Make PUT request to ENDPOINT with JSON BODY and optional PARAMS.
-BODY is an alist that will be JSON-encoded.  Returns parsed JSON response."
-  (let* ((url (org-trello-ng-api--build-url endpoint params))
-         (url-request-method "PUT")
-         (url-request-extra-headers
-          '(("Content-Type" . "application/json")))
-         (url-request-data (encode-coding-string (json-encode body) 'utf-8))
-         (buffer (url-retrieve-synchronously url t t 30)))
-    (unwind-protect
-        (org-trello-ng-api--handle-response buffer)
-      (kill-buffer buffer))))
+BODY is an alist that will be JSON-encoded.  Returns parsed JSON response.
+Retries automatically on 429."
+  (org-trello-ng-api--with-retry
+   (lambda ()
+     (let* ((url (org-trello-ng-api--build-url endpoint params))
+            (url-request-method "PUT")
+            (url-request-extra-headers
+             '(("Content-Type" . "application/json")))
+            (url-request-data (encode-coding-string (json-encode body) 'utf-8))
+            (buffer (url-retrieve-synchronously url t t 30)))
+       (unwind-protect
+           (org-trello-ng-api--handle-response buffer)
+         (kill-buffer buffer))))))
 
 (defun org-trello-ng-api-delete (endpoint &optional params)
   "Make DELETE request to ENDPOINT with optional PARAMS.
-Returns parsed JSON response."
-  (let* ((url (org-trello-ng-api--build-url endpoint params))
-         (url-request-method "DELETE")
-         (buffer (url-retrieve-synchronously url t t 30)))
-    (unwind-protect
-        (org-trello-ng-api--handle-response buffer)
-      (kill-buffer buffer))))
+Returns parsed JSON response.  Retries automatically on 429."
+  (org-trello-ng-api--with-retry
+   (lambda ()
+     (let* ((url (org-trello-ng-api--build-url endpoint params))
+            (url-request-method "DELETE")
+            (buffer (url-retrieve-synchronously url t t 30)))
+       (unwind-protect
+           (org-trello-ng-api--handle-response buffer)
+         (kill-buffer buffer))))))
 
 (defconst org-trello-ng-api-batch-max 10
   "Maximum number of URLs per Trello batch request.")
